@@ -2,6 +2,7 @@ extends Control
 
 var _hearts: HBoxContainer
 var _message: Label
+var _finished: bool = false
 var _retry: Button
 
 func _ready() -> void:
@@ -29,6 +30,8 @@ func _ready() -> void:
 func bind_player(player: Node) -> void:
 	player.health_changed.connect(_update_hearts)
 	player.died.connect(_on_player_died)
+	player.objective_changed.connect(_set_objective)
+	player.victory.connect(_on_victory)
 	_update_hearts(player.health, player.max_health)
 
 func _update_hearts(current: int, maximum: int) -> void:
@@ -43,5 +46,16 @@ func _update_hearts(current: int, maximum: int) -> void:
 		_hearts.add_child(heart)
 
 func _on_player_died() -> void:
+	_finished = true
 	_message.text = "Has caido. Pulsa R o Reintentar."
+	_retry.show()
+
+func _set_objective(text: String) -> void:
+	if not _finished:
+		_message.text = text
+
+func _on_victory() -> void:
+	_finished = true
+	_message.text = "Nivel completado. Bien hecho, ZorVaK!"
+	_retry.text = "Volver a jugar (R)"
 	_retry.show()

@@ -19,6 +19,8 @@ func _run() -> void:
 	await physics_frame
 	var player = world.get_node("ZorVaK")
 	var enemy = world.get_node("Enemy_budy")
+	enemy.chase_speed = 0.0
+	world.get_node("Enemy_guard").chase_speed = 0.0
 	_check(player.health == 3 and not player.has_sword, "Inicio con tres corazones y sin espada")
 	player.atacar()
 	_check(not player.is_attacking, "No puede atacar sin espada")

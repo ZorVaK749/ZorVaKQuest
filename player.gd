@@ -1,72 +1,123 @@
 extends CharacterBody2D
 
-@export var speed = 250
+signal health_changed(current: int, maximum: int)
+signal died
+signal objective_changed(text: String)
+signal victory
 
-# --- NUEVA VARIABLE ---
-var has_sword = false  # Empieza en falso: no tienes arma
+@export var attack_visual_distance: float = 6.0
+@export var speed: float = 250.0
+@export_range(1, 20) var max_health: int = 3
+@export var invulnerability_seconds: float = 1.0
 
-var is_attacking = false
-var last_direction = Vector2.RIGHT 
+var has_sword: bool = false
+var is_attacking: bool = false
+var last_direction: Vector2 = Vector2.RIGHT
+var health: int
+var is_dead: bool = false
+var is_complete: bool = false
+var _visual_tween: Tween
+var _sprite_origin: Vector2
+var _invulnerability_left: float = 0.0
+var _hit_this_swing: Dictionary = {}
 
-func _physics_process(delta):
-	var direction = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-	
-	if direction:
-		velocity = direction * speed
+@onready var _blade: Sprite2D = $ManoPivot/EspadaVisual
+@onready var _hitbox: Area2D = $ManoPivot/EspadaVisual/HitboxEspada
+
+func _ready() -> void:
+	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
+	health = max_health
+	_sprite_origin = $Sprite2D.position
+	add_to_group("player")
+	var canvas := CanvasLayer.new()
+	add_child(canvas)
+	var hud := Control.new()
+	hud.set_script(preload("res://hud.gd"))
+	canvas.add_child(hud)
+	hud.bind_player(self)
+
+func _physics_process(delta: float) -> void:
+	_invulnerability_left = maxf(0.0, _invulnerability_left - delta)
+	$Sprite2D.modulate.a = 0.35 if _invulnerability_left > 0.0 and int(_invulnerability_left * 12.0) % 2 == 0 else 1.0
+	if is_dead or is_complete:
+		return
+	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	velocity = direction * speed
+	if direction != Vector2.ZERO:
 		last_direction = direction
-	else:
-		velocity = Vector2.ZERO
-
 	move_and_slide()
+	# Comprueba tambien enemigos que ya estaban dentro al iniciar el golpe.
+	if is_attacking:
+		for body in _hitbox.get_overlapping_bodies():
+			_try_hit(body)
 
-func _input(event):
-	if event.is_action_pressed("attack"):
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if (is_dead or is_complete) and event.physical_keycode == KEY_R:
+			get_tree().reload_current_scene()
+	if event.is_action_pressed("attack") and not event.is_echo():
 		atacar()
 
-func atacar():
-	if has_sword == false:
+func collect_sword() -> void:
+	has_sword = true
+	objective_changed.emit("Espada equipada. Derrota a los enemigos rojos.")
+
+func take_damage(amount: int = 1) -> void:
+	if is_dead or is_complete or _invulnerability_left > 0.0 or amount <= 0:
 		return
-	if is_attacking:
+	health = maxi(0, health - amount)
+	_invulnerability_left = invulnerability_seconds
+	health_changed.emit(health, max_health)
+	if health == 0:
+		is_dead = true
+		velocity = Vector2.ZERO
+		is_attacking = false
+		_blade.hide()
+		_reset_visual()
+		died.emit()
+
+func atacar() -> void:
+	if not has_sword or is_attacking or is_dead or is_complete:
 		return
-	
 	is_attacking = true
-	
-	# Referencias
-	var pivot = $ManoPivot
-	var espada = $ManoPivot/EspadaVisual
-	
-	# 1. Hacemos visible la espada
-	espada.visible = true
-	
-	# 2. Calcular hacia dónde mirar
-	# Obtenemos el ángulo de la última dirección (0 es derecha, 90 es abajo, etc.)
-	var angulo_ataque = last_direction.angle()
-	
-	# 3. Posición INICIAL del golpe (Retroceso)
-	# Empezamos 60 grados "atrás" de la dirección de ataque
-	# Esto hace que el golpe empiece desde un lado
-	pivot.rotation = angulo_ataque - deg_to_rad(60)
-	
-	var tween = create_tween()
-	
-	# 4. El Barrido (Swing)
-	# Giramos el pivote 120 grados hacia el otro lado
-	# Esto cubre todo el frente del personaje (de -60 a +60)
-	tween.tween_property(pivot, "rotation", angulo_ataque + deg_to_rad(60), 0.15)\
-		.set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
-	
+	_hit_this_swing.clear()
+	# Impulso exclusivamente visual: no mueve el cuerpo ni la espada.
+	_visual_tween = create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	_visual_tween.tween_property($Sprite2D, "position", _sprite_origin + last_direction.normalized() * attack_visual_distance, 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_visual_tween.tween_property($Sprite2D, "position", _sprite_origin, 0.10)
+	_blade.show()
+	var pivot: Node2D = $ManoPivot
+	var angle := last_direction.angle()
+	pivot.rotation = angle - deg_to_rad(60)
+	var tween := create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	tween.tween_property(pivot, "rotation", angle + deg_to_rad(60), 0.15).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
 	await tween.finished
-	
-	# 5. Limpieza
-	espada.visible = false
+	_blade.hide()
 	is_attacking = false
 
+func _try_hit(body: Node2D) -> void:
+	if not is_attacking or is_dead or not is_instance_valid(body):
+		return
+	if body.has_method("take_damage") and body != self:
+		var id := body.get_instance_id()
+		if not _hit_this_swing.has(id):
+			_hit_this_swing[id] = true
+			body.take_damage(1)
 
 func _on_hitbox_espada_body_entered(body: Node2D) -> void:
-	# 1. Primero confirmamos que el choque ocurra SOLO mientras atacamos
-	if is_attacking == true:
-		# 2. Verificamos si lo que tocamos se llama "Enemy_budy"
-		if body.name == "Enemy_budy":
-			print("¡ZAS! Has derrotado a Enemy_budy!")
-			# 3. Borramos al enemigo del juego
-			body.queue_free() # Replace with function body.
+	_try_hit(body)
+
+func _reset_visual() -> void:
+	if _visual_tween and _visual_tween.is_valid():
+		_visual_tween.kill()
+	$Sprite2D.position = _sprite_origin
+
+func complete_level() -> void:
+	if is_dead or is_complete:
+		return
+	is_complete = true
+	is_attacking = false
+	velocity = Vector2.ZERO
+	_blade.hide()
+	_reset_visual()
+	victory.emit()

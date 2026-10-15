@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="ZorVaKQuest"
-run/main_scene="uid://bvgrbpi6gajpl"
+run/main_scene="res://mundo.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
 

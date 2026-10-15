@@ -1,9 +1,22 @@
-[gd_scene load_steps=7 format=4 uid="uid://cuogiectb2rdi"]
+[gd_scene load_steps=13 format=4 uid="uid://cuogiectb2rdi"]
 
 [ext_resource type="Texture2D" uid="uid://bgttqv75rmqm3" path="res://icon.svg" id="1_6ba58"]
 [ext_resource type="PackedScene" uid="uid://bvgrbpi6gajpl" path="res://player.tscn" id="2_lgngo"]
 [ext_resource type="PackedScene" uid="uid://bek2deoqre6ut" path="res://espada_item.tscn" id="3_fw4w5"]
 [ext_resource type="PackedScene" uid="uid://bia53v8pqriov" path="res://enemy_budy.tscn" id="4_otwa2"]
+
+[ext_resource type="Script" path="res://world.gd" id="5_world"]
+[ext_resource type="Script" path="res://door.gd" id="6_door"]
+[ext_resource type="Script" path="res://exit.gd" id="7_exit"]
+
+[sub_resource type="RectangleShape2D" id="GateShape"]
+size = Vector2(56, 16)
+
+[sub_resource type="RectangleShape2D" id="ExitWallShape"]
+size = Vector2(16, 104)
+
+[sub_resource type="CircleShape2D" id="ExitShape"]
+radius = 19.0
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_lgngo"]
 texture = ExtResource("1_6ba58")
@@ -141,6 +154,7 @@ physics_layer_0/collision_layer = 1
 sources/0 = SubResource("TileSetAtlasSource_lgngo")
 
 [node name="Mundo" type="Node2D"]
+script = ExtResource("5_world")
 
 [node name="TileMapLayer" type="TileMapLayer" parent="."]
 position = Vector2(0.007095337, 0.04001999)
@@ -155,3 +169,41 @@ position = Vector2(-307, -546)
 [node name="Enemy_budy" parent="." instance=ExtResource("4_otwa2")]
 position = Vector2(319, -111)
 scale = Vector2(0.25799754, 0.24656901)
+
+[node name="Enemy_guard" parent="." instance=ExtResource("4_otwa2")]
+position = Vector2(100, -180)
+scale = Vector2(0.25799754, 0.24656901)
+
+[node name="MuroSalida" type="StaticBody2D" parent="."]
+position = Vector2(336, -284)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="MuroSalida"]
+shape = SubResource("ExitWallShape")
+
+[node name="Visual" type="Polygon2D" parent="MuroSalida"]
+polygon = PackedVector2Array(-8, -52, 8, -52, 8, 52, -8, 52)
+color = Color(0.3, 0.32, 0.4, 1)
+
+[node name="Puerta" type="StaticBody2D" parent="."]
+position = Vector2(372, -232)
+script = ExtResource("6_door")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Puerta"]
+shape = SubResource("GateShape")
+
+[node name="Visual" type="Polygon2D" parent="Puerta"]
+polygon = PackedVector2Array(-28, -8, 28, -8, 28, 8, -28, 8)
+color = Color(0.85, 0.55, 0.15, 1)
+
+[node name="Salida" type="Area2D" parent="."]
+position = Vector2(372, -288)
+collision_layer = 0
+script = ExtResource("7_exit")
+door_path = NodePath("../Puerta")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Salida"]
+shape = SubResource("ExitShape")
+
+[node name="Visual" type="Polygon2D" parent="Salida"]
+polygon = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+color = Color(0.2, 0.9, 0.55, 1)
